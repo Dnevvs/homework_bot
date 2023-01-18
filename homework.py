@@ -44,8 +44,9 @@ def send_message(bot, message):
             chat_id=TELEGRAM_CHAT_ID,
             text=message)
         logger.debug('Сообщение в Телеграм успешно отправлено')
-    except telegram.TelegramError as error:
-        logger.error(f'Сообщение в Телеграм нe отправлено: {error}')
+    except telegram.error.TelegramError as error:
+        logger.error(error, exc_info=True)  # без этого pytest не проходит
+        raise Exception(f'Сообщение в Телеграм нe отправлено {error}')
 
 
 def get_api_answer(timestamp):
@@ -58,30 +59,24 @@ def get_api_answer(timestamp):
             raise ApiRequestError(
                 f'Endpoint {ENDPOINT} не доступен: {response.status_code}')
         logger.debug('Ответ API получен')
-        try:
-            return response.json()
-        except TypeError as error:
-            logger.debug(f'Ошибка преобразования JSON {error}')
+        return response.json()
     except requests.RequestException as error:
-        logger.error(f'Endpoint {ENDPOINT} не доступен: {error}')
+        raise Exception(f'Endpoint {ENDPOINT} не доступен: {error}')
 
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
-    if type(response) != dict:
+    if isinstance(response, dict) is False:
         message = f'Некорректный формат ответа API: {type(response)}'
         raise TypeError(message)
     if 'homeworks' not in response:
         message = "В ответе отсутствует ключ 'homeworks'"
         raise KeyError(message)
-    if len(response['homeworks']) == 0:
-        message = 'В ответе пустой список работ'
-        raise IndexError(message)
     if 'current_date' not in response:
         message = "В ответе отсутствует ключ 'current_date'"
         raise KeyError(message)
     homework = response.get('homeworks')
-    if type(homework) != list:
+    if isinstance(homework, list) is False:
         message = f'Некорректный формат списка работ: {type(homework)}'
         raise TypeError(message)
     return homework
@@ -111,18 +106,21 @@ def main():
         sys.exit()
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
-    # timestamp = 0
+    # timestamp = timestamp - 2 * 24 * 3600
     status = ''
     message = ''
     prev_message = ''
     while True:
         try:
-            logger.debug('Отправлен запрос к API')
             response = get_api_answer(timestamp)
             timestamp = response.get('current_date')
             homework = check_response(response)
-            message = parse_status(homework[0])
-            logger.debug('Получен ответ API')
+            logger.debug(f'{homework}')
+            if len(homework) == 0:
+                message = 'В ответе пустой список работ'
+            else:
+                message = parse_status(homework[0])
+            logger.debug(f'{message}')
             if status != message:
                 status = message
                 logger.debug('Статус домашней работы обновился.')
