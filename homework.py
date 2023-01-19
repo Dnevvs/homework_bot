@@ -61,7 +61,7 @@ def get_api_answer(timestamp):
         logger.debug('Ответ API получен')
         return response.json()
     except requests.RequestException as error:
-        raise Exception(f'Endpoint {ENDPOINT} не доступен: {error}')
+        raise ApiRequestError(f'Endpoint {ENDPOINT} не доступен: {error}')
 
 
 def check_response(response):
@@ -94,7 +94,7 @@ def parse_status(homework):
     homework_name = homework['homework_name']
     status = homework['status']
     if status not in HOMEWORK_VERDICTS:
-        raise Exception(f'Неизвестный статус работы: {status}')
+        raise IndexError(f'Неизвестный статус работы: {status}')
     verdict = HOMEWORK_VERDICTS[status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -114,12 +114,13 @@ def main():
         try:
             response = get_api_answer(timestamp)
             timestamp = response.get('current_date')
-            homework = check_response(response)
-            logger.debug(f'{homework}')
-            if len(homework) == 0:
+            homeworks = check_response(response)
+            logger.debug(f'{homeworks}')
+            if not homeworks:
                 message = 'В ответе пустой список работ'
-            else:
-                message = parse_status(homework[0])
+                logger.debug(f'{message}')
+                continue
+            message = parse_status(homeworks[0])
             logger.debug(f'{message}')
             if status != message:
                 status = message
